@@ -1,0 +1,4 @@
+python-ldap>=3.4
+cryptography>=42.0.0
+certifi>=2024.2.2
+

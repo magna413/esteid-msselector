@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "esteid-msselector"
+version = "0.1.0"
+description = "Fetch Estonian eID certificates from SK LDAP and render Microsoft X509 selector strings"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Magnus Jaaska" }]
+requires-python = ">=3.9"
+dependencies = [
+  "python-ldap>=3.4",
+  "cryptography>=42.0.0",
+  "certifi>=2024.2.2",
+]
+
+[project.urls]
+Homepage = "https://github.com/your-user/esteid-msselector"
+Issues = "https://github.com/your-user/esteid-msselector/issues"
+
+[project.scripts]
+esteid-msselector = "esteid_msselector.__main__:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
