@@ -65,7 +65,7 @@ class EsteidLDAP:
     def _IssuerAndSubject(self, cert: x509.Certificate) -> str:
         issuer = self._issuer_dn_with_oids(cert)
         serial_rev = self._reverse_hex_bytes(f"{cert.serial_number:x}")
-        return f"X509:<I:{issuer}<SR:{serial_rev}"
+        return f"X509:<I>{issuer}<SR>{serial_rev}"
 
     def _SHA1PublicKey(self, cert: x509.Certificate) -> str:
         """SHA1 of SubjectPublicKeyInfo (DER)."""
