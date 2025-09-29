@@ -5,6 +5,10 @@ from typing import List
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from .errors import CertificateNotFoundError
+from cryptography.hazmat.primitives import hashes, serialization
+from .errors import LdapConnectionError
+from asn1crypto import keys
+
 
 
 class EsteidLDAP:
@@ -57,6 +61,44 @@ class EsteidLDAP:
             dl = dn.lower()
             (auth if ("ou=authentication" in dl and "o=mobile-id" not in dl) else rest).append((dn, entry))
         return auth if auth else results
+    
+    def _IssuerAndSubject(self, cert: x509.Certificate) -> str:
+        issuer = self._issuer_dn_with_oids(cert)
+        serial_rev = self._reverse_hex_bytes(f"{cert.serial_number:x}")
+        return f"X509:<I:{issuer}<SR:{serial_rev}"
+
+    def _SHA1PublicKey(self, cert: x509.Certificate) -> str:
+        """SHA1 of SubjectPublicKeyInfo (DER)."""
+        spki = cert.public_key().public_bytes(
+            encoding=serialization.Encoding.DER,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo
+        )
+        h = hashes.Hash(hashes.SHA1())
+        h.update(spki)
+        return f"X509:<SHA1-PUKEY>{h.finalize().hex()}"
+    
+    """SKI"""
+    def _SubjectKeyIdentifier(self, cert: x509.Certificate) -> str:
+        """SKI from extension if present; else SHA1 of subjectPublicKey BIT STRING."""
+        try:
+            ski = cert.extensions.get_extension_for_class(x509.SubjectKeyIdentifier)
+            return f"X509:<SKI>{ski.value.digest.hex()}"
+        except x509.ExtensionNotFound:
+            # Compute RFC 5280 Method 1: SHA1 over the subjectPublicKey BIT STRING (not whole SPKI)
+            spki = cert.public_key().public_bytes(
+                encoding=serialization.Encoding.DER,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo
+            )
+            # Parse out the BIT STRING: simple approach—load as public key and re-encode the raw key bits where available.
+            # cryptography doesn’t expose the bit string directly, but RFC method is equivalent for most CAs to SKI extension.
+            # Practical fallback: hash the BIT STRING by stripping the SPKI header.
+            # Minimal DER walk:
+              # if you prefer no extra dep, keep extension-first approach above
+            spki_parsed = keys.PublicKeyInfo.load(spki)
+            key_bytes = spki_parsed["public_key"].native  # bytes of the BIT STRING
+            h = hashes.Hash(hashes.SHA1())
+            h.update(key_bytes)
+            return f"X509:<SKI>{h.finalize().hex()}"
 
     def get_ms_strings(self, id_code: str) -> List[str]:
         search_filter = f"(serialNumber=PNOEE-{id_code})"
@@ -72,9 +114,13 @@ class EsteidLDAP:
         out: List[str] = []
         for der in certs:
             cert = x509.load_der_x509_certificate(der, default_backend())
-            issuer = self._issuer_dn_with_oids(cert)
-            serial_rev = self._reverse_hex_bytes(f"{cert.serial_number:x}")
-            out.append(f"X509:<I>{issuer}<SR>{serial_rev}")
+            issuer_and_subject = self._IssuerAndSubject(cert)
+            sha1_pubkey = self._SHA1PublicKey(cert)
+            subject_key_id = self._SubjectKeyIdentifier(cert)
+            out.append(f"{'SHA1PublicKey':<22}{sha1_pubkey}")
+            out.append(f"{'SubjectKeyIdentifier':<22}{subject_key_id}")
+            out.append(f"{'IssuerAndSubject':<22}{issuer_and_subject}")
+
         return out
 
     def close(self):
